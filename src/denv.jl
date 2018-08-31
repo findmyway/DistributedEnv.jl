@@ -1,39 +1,46 @@
 using Distributed
-using .Env
+using ReinforcementLearningBase
 
 export DEnv, whereis, send
 
-struct DEnv <: AbstractDistributedEnv
+struct Message
+    resbox::Distributed.AbstractRemoteRef
+    method::Symbol
+    args::Tuple
+    kw::Iterators.Pairs
+end
+
+struct DEnv{T <: AbstractEnv}
     id::String
     mailbox::RemoteChannel{Channel{Message}}
     actionspace::AbstractSpace
 end
 
 
-function DEnv(id::String, pid::Int=myid(); kw...)
+function DEnv(envtype::DataType, id::String, pid::Int=myid(); kw...)
     mailbox = RemoteChannel(pid) do
         Channel(;ctype=Message, csize=Inf) do c
             try
-                env = id2env(id; kw...)
+                env = envtype(id; kw...)
                 while true
                     msg = take!(c)
-                    put!(msg.resbox, receive(env, msg.method, msg.args, msg.kw))
+                    put!(msg.resbox, @eval $(msg.method)(env, msg.args...; msg.kw...))
                 end
             catch e
                 @error e
             end
         end
     end
-    actionspace = send(mailbox, "actionspace") |> fetch
-    DEnv(id, mailbox, actionspace)
+    actionspace = send(mailbox, :actionspace) |> fetch
+    DEnv{envtype}(id, mailbox, actionspace)
 end
 
 whereis(env::DEnv) = env.mailbox.where
 
-function send(mailbox::RemoteChannel{Channel{Message}} , method::String, args...; kw...)
+function send(mailbox::RemoteChannel{Channel{Message}} , method::Symbol, args...; kw...)
     resbox = Future(mailbox.where)
     put!(mailbox, Message(resbox, method, args, kw))
     resbox
 end
 
-send(env::DEnv, method::String, args...; kw...) = send(env.mailbox, method, args...; kw...)
+send(env::DEnv, method::Symbol, args...; kw...) = send(env.mailbox, method, args...; kw...)

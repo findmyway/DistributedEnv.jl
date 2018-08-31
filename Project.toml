@@ -4,12 +4,8 @@ authors = ["Jun Tian <juti@microsoft.com>"]
 version = "0.1.0"
 
 [deps]
-ArcadeLearningEnvironment = "b7f77d8d-088d-5e02-8ac0-89aab2acc977"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
-MLStyle = "d8e11817-5142-5d16-987a-aa16d5891078"
-PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
-Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
-ViZDoom = "13bb3beb-38fe-5ca7-9a46-050a216300b1"
+ReinforcementLearningBase = "9b2b9cba-ac73-11e8-02b1-9f0869453fc0"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
