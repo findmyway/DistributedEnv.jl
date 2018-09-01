@@ -1,7 +1,7 @@
 using Distributed
 using ReinforcementLearningBase
-
-export DEnv, whereis, send
+export sample
+export RemoteEnv, whereis, send
 
 struct Message
     resbox::Distributed.AbstractRemoteRef
@@ -10,21 +10,30 @@ struct Message
     kw::Iterators.Pairs
 end
 
-struct DEnv{T <: AbstractEnv}
-    id::String
+struct RemoteEnv{T <: AbstractEnv}
     mailbox::RemoteChannel{Channel{Message}}
     actionspace::AbstractSpace
 end
 
 
-function DEnv(envtype::DataType, id::String, pid::Int=myid(); kw...)
+"""
+Create an environment on a worker.
+
+    RemoteEnv(envtype::Type{T}, args...; pid::Int=myid(), kw...) where T <: AbstractEnv
+
+The `args` and `kw` are passed to `envtype` to create an environment at a worker
+specified by `pid`.
+"""
+function RemoteEnv(envtype::Type{T}, args...; pid::Int=myid(), kw...) where T <: AbstractEnv
+    envtype <: AbstractEnv || throw("Unsupported Environment type $envtype")
     mailbox = RemoteChannel(pid) do
         Channel(;ctype=Message, csize=Inf) do c
             try
-                env = envtype(id; kw...)
+                env = envtype(args...; kw...)
                 while true
                     msg = take!(c)
-                    put!(msg.resbox, @eval $(msg.method)(env, msg.args...; msg.kw...))
+                    method = @eval Main.$(msg.method)
+                    put!(msg.resbox, method(env, msg.args...; msg.kw...))
                 end
             catch e
                 @error e
@@ -32,10 +41,11 @@ function DEnv(envtype::DataType, id::String, pid::Int=myid(); kw...)
         end
     end
     actionspace = send(mailbox, :actionspace) |> fetch
-    DEnv{envtype}(id, mailbox, actionspace)
+    RemoteEnv{T}(mailbox, actionspace)
 end
 
-whereis(env::DEnv) = env.mailbox.where
+"Return the worker id of an `RemoteEnv`"
+whereis(env::RemoteEnv) = env.mailbox.where
 
 function send(mailbox::RemoteChannel{Channel{Message}} , method::Symbol, args...; kw...)
     resbox = Future(mailbox.where)
@@ -43,4 +53,4 @@ function send(mailbox::RemoteChannel{Channel{Message}} , method::Symbol, args...
     resbox
 end
 
-send(env::DEnv, method::Symbol, args...; kw...) = send(env.mailbox, method, args...; kw...)
+send(env::RemoteEnv, method::Symbol, args...; kw...) = send(env.mailbox, method, args...; kw...)
